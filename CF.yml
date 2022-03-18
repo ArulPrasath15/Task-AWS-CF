@@ -1,0 +1,338 @@
+AWSTemplateFormatVersion: 2010-09-09
+
+Parameters:
+
+  InstanceType:
+    Type: String
+    Default: t2.micro
+    Description: Instance Type
+
+  VPCcidr:
+    Type: String
+    Description: Vpc CIDR
+  
+  DBInstanceName:
+    Type: String
+    Description: DB instance class
+  
+  DBName:
+    Type: String
+    Default: wordpressdb
+    Description: My database
+    
+  DBInstanceClass:
+    Type: String
+    Default: db.t3.micro
+    Description: DB instance class
+
+  DBUsername:
+    NoEcho: 'true'
+    Description: MySQL Username 
+    Type: String
+
+  DBPassword:
+    NoEcho: 'true'
+    Description: MySQL Password
+    Type: String
+
+
+
+
+Resources:
+  VPC:
+    Type: 'AWS::EC2::VPC'
+    Properties:
+      CidrBlock: !Ref VPCcidr
+      EnableDnsSupport: 'true'
+      EnableDnsHostnames: 'true'
+      Tags:
+        - Key: Name
+          Value: Arul-vpc
+        - Key: Owner
+          Value: arulprasathv@presidio.com
+
+  InternetGateway:
+    Type: 'AWS::EC2::InternetGateway'
+    Properties:
+      Tags:
+        - Key: Name
+          Value: Arul-ig
+        - Key: Owner
+          Value: arulprasathv@presidio.com
+
+  InternetGatewayAttachment:
+    Type: 'AWS::EC2::VPCGatewayAttachment'
+    Properties:
+      InternetGatewayId: !Ref InternetGateway
+      VpcId: !Ref VPC
+
+  PublicSubnet1:
+    Type: 'AWS::EC2::Subnet'
+    Properties:
+      VpcId: !Ref VPC
+      AvailabilityZone: us-east-1a
+      CidrBlock: 15.0.1.0/24
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: Name
+          Value: Arul-public-1
+        - Key: Owner
+          Value: arulprasathv@presidio.com
+
+  PublicSubnet2:
+    Type: 'AWS::EC2::Subnet'
+    Properties:
+      VpcId: !Ref VPC
+      AvailabilityZone: us-east-1b
+      CidrBlock: 15.0.2.0/24
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: Name
+          Value: Arul-public-2
+        - Key: Owner
+          Value: arulprasathv@presidio.com
+          
+  PrivateSubnet1:
+    Type: 'AWS::EC2::Subnet'
+    Properties:
+      VpcId: !Ref VPC
+      AvailabilityZone: us-east-1a
+      CidrBlock: 15.0.11.0/24
+      MapPublicIpOnLaunch: false
+      Tags:
+        - Key: Name
+          Value: Arul-private-1
+        - Key: Owner
+          Value: arulprasathv@presidio.com
+
+  PrivateSubnet2:
+    Type: 'AWS::EC2::Subnet'
+    Properties:
+      VpcId: !Ref VPC
+      AvailabilityZone: us-east-1b
+      CidrBlock: 15.0.12.0/24
+      MapPublicIpOnLaunch: false
+      Tags:
+        - Key: Name
+          Value: Arul-private-2
+        - Key: Owner
+          Value: arulprasathv@presidio.com
+
+  PublicRouteTable:
+    Type: 'AWS::EC2::RouteTable'
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: Arul-publicRT
+        - Key: Owner
+          Value: arulprasathv@presidio.com
+
+  DefaultPublicRoute:
+    Type: 'AWS::EC2::Route'
+    DependsOn: InternetGatewayAttachment
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref InternetGateway
+
+  PublicSubnet1RouteTableAssociation:
+    Type: 'AWS::EC2::SubnetRouteTableAssociation'
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      SubnetId: !Ref PublicSubnet1
+
+  PublicSubnet2RouteTableAssociation:
+    Type: 'AWS::EC2::SubnetRouteTableAssociation'
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      SubnetId: !Ref PublicSubnet2
+        
+  DBSecurityGroup:
+    Type: 'AWS::EC2::SecurityGroup'
+    Properties:
+      GroupDescription: Enable 3306 from 0.0.0.0/0
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: '3306'
+          ToPort: '3306'
+          CidrIp: 0.0.0.0/0
+          
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: 'Arul-db-sg'  
+        - Key: Owner
+          Value: arulprasathv@presidio.com      
+      
+  RDSInstance:
+    Type: 'AWS::RDS::DBInstance'
+    Properties:
+      DBInstanceIdentifier: !Ref DBInstanceName
+      DBName: !Ref DBName
+      DBInstanceClass: !Ref DBInstanceClass
+      AllocatedStorage: 5
+      Engine: MySQL
+      EngineVersion: 8.0.16
+      MultiAZ: True
+      MasterUsername: !Ref DBUsername
+      MasterUserPassword: !Ref DBPassword
+      DBSubnetGroupName: !Ref RDSDBsubnetgroup
+      VPCSecurityGroups:
+        - !Ref DBSecurityGroup
+      
+     
+  RDSDBsubnetgroup:
+    Type: AWS::RDS::DBSubnetGroup
+    Properties: 
+      DBSubnetGroupName: 'Arul-dbsubnetgroup'
+      DBSubnetGroupDescription: 'DB Subnet'
+      SubnetIds: 
+        - !Ref PrivateSubnet1
+        - !Ref PrivateSubnet2
+      Tags:
+        - Key: Name
+          Value: 'Arul-dbsubnet'
+        - Key: Owner
+          Value: arulprasathv@presidio.com 
+
+  WebServerSecurityGroup:
+    Type: 'AWS::EC2::SecurityGroup'
+    Properties:
+      GroupDescription: Enable HTTP from 0.0.0.0/0
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: '80'
+          ToPort: '80'
+          CidrIp: 0.0.0.0/0
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: 'Arul-sg'
+        - Key: Owner
+          Value: arulprasathv@presidio.com 
+
+
+  ALB:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties: 
+      Subnets: 
+        - Ref: PublicSubnet1
+        - Ref: PublicSubnet2
+      SecurityGroups:
+        - Ref: WebServerSecurityGroup
+      Tags:
+        - Key: Name
+          Value: 'Arul-ALB'
+        - Key: Owner
+          Value: arulprasathv@presidio.com
+
+  ALBTargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      HealthCheckPath: "/wordpress/wp-admin/install.php"
+      HealthCheckIntervalSeconds: 10
+      HealthCheckTimeoutSeconds: 5
+      HealthyThresholdCount: 2
+      Port: 80
+      Protocol: HTTP
+      UnhealthyThresholdCount: 5
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: 'Arul-ALBTargetGroup'
+        - Key: Owner
+          Value: arulprasathv@presidio.com
+
+  ALBListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      DefaultActions:
+      - Type: forward
+        TargetGroupArn: 
+          Ref: ALBTargetGroup
+      LoadBalancerArn: 
+        Ref: ALB
+      Port: '80'
+      Protocol: HTTP
+  
+
+  
+  AutoScalingSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Enable HTTP access via port 80 locked down to the load balancer + SSH access
+      SecurityGroupIngress:
+      - IpProtocol: tcp
+        FromPort: '80'
+        ToPort: '80'
+        CidrIp: 0.0.0.0/0
+
+      - IpProtocol: tcp
+        FromPort: '22'
+        ToPort: '22'
+        CidrIp: 0.0.0.0/0
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: 'Arul-as-sg'
+        - Key: Owner
+          Value: arulprasathv@presidio.com
+
+  WebServerAutoScalingGroup:
+    Type: AWS::AutoScaling::AutoScalingGroup
+    Properties:
+      VPCZoneIdentifier:
+        - Ref: PublicSubnet1
+        - Ref: PublicSubnet2
+      LaunchConfigurationName:
+        Ref: LaunchConfig
+      MinSize: '1'
+      MaxSize: '3'
+      DesiredCapacity: "2"
+      TargetGroupARNs:
+      - Ref: ALBTargetGroup
+     
+    
+  LaunchConfig:
+    Type: 'AWS::AutoScaling::LaunchConfiguration'
+    Properties:
+      ImageId: ami-0ed9277fb7eb570c9
+      InstanceType: !Ref InstanceType
+      SecurityGroups:
+        - !Ref AutoScalingSecurityGroup
+      KeyName: TrainingKey-Arul	
+      UserData: 
+        Fn::Base64: 
+          Fn::Join:
+            - "\n"
+            - - "#!/bin/bash -xe"
+              - "sudo yum update -y"
+              - "sudo amazon-linux-extras install -y php7.2"
+              - "sudo yum install -y httpd git"
+              - "sudo systemctl start httpd"
+              - "sudo systemctl enable httpd"
+              - "sudo usermod -a -G apache ec2-user"
+              - "sudo chown -R ec2-user:apache /var/www"
+              - "sudo chmod 2775 /var/www"
+              - "cd /var/www/html"
+              - "git clone https://github.com/ArulPrasath15/php-app.git ."
+              - Fn::Join:
+                  - ""
+                  - - 'sudo echo '
+                    - Fn::GetAtt:
+                        - RDSInstance
+                        - Endpoint.Address
+                    -  ' > host.txt'
+
+
+Outputs:
+  WordPressURL:
+    Value:
+      Fn::Join:
+      - ''
+      - - http://
+        - Fn::GetAtt:
+          - ALB
+          - DNSName
+    Description: URL
